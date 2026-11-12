@@ -113,7 +113,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault()
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.language = Locale.getDefault()
+            // Prefer an installed female-labelled voice when the Android TTS engine exposes one.
+            val femaleVoice = tts?.voices?.firstOrNull {
+                it.locale.language == Locale.getDefault().language && it.name.contains("female", ignoreCase = true)
+            }
+            if (femaleVoice != null) tts?.voice = femaleVoice
+        }
     }
 
     override fun onDestroy() {
@@ -180,7 +187,14 @@ private fun RoseApp(
             busy = true
             status = "ROSE is thinking online…"
             Thread {
-                val answer = try { OnlineAssistant.reply(key, clean) }
+                val conversation = messages.takeLast(20).mapNotNull { line ->
+                when {
+                    line.startsWith("You: ") -> "user" to line.removePrefix("You: ")
+                    line.startsWith("ROSE: ") -> "assistant" to line.removePrefix("ROSE: ")
+                    else -> null
+                }
+            }
+            val answer = try { OnlineAssistant.reply(key, conversation) }
                 catch (_: Exception) { "I couldn't reach the online service. Check your internet connection and API settings." }
                 mainHandler.post {
                     busy = false
