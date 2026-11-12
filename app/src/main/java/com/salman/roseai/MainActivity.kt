@@ -199,7 +199,7 @@ private fun RoseApp(
                 catch (_: Exception) { "I couldn't reach the online service. Check your internet connection and API settings." }
                 mainHandler.post {
                     busy = false
-                    status = "Online AI connected • Your key stays on this device"
+                    status = "Online reply received • Your key stays on this device"
                     speakAndAdd(answer)
                 }
             }.start()
@@ -301,7 +301,7 @@ private fun RoseApp(
                 title = { Text("ROSE settings") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Mode: Offline commands work without an AI key. Online chat uses your own OpenAI API key.")
+                        Text("Mode: Offline commands work without an AI key. Online chat uses your own OpenRouter API key and free model routing.")
                         Text(if (secureStore.read().isNullOrBlank()) "Online AI: Not configured" else "Online AI: API key saved securely")
                         Text("Speech recognition and spoken voice are provided by Android. Offline speech depends on your installed language pack.")
                         Text("Background wake word and camera gesture tracking are not enabled in this build.")
@@ -326,14 +326,14 @@ private fun RoseApp(
                 title = { Text("Online AI connection") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Paste your OpenAI API key. It is encrypted with Android Keystore and is not included in the APK.")
+                        Text("Paste your OpenRouter API key (starts with sk-or-). It is encrypted with Android Keystore and is not included in the APK.")
                         OutlinedTextField(
                             value = apiKeyDraft, onValueChange = { apiKeyDraft = it },
                             label = { Text("API key") }, singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                         )
-                        Text("Online requests use gpt-4o-mini and may incur charges on your provider account.", color = Color.Gray, fontSize = 11.sp)
+                        Text("Online requests use OpenRouter free-model routing. Free models have daily and per-minute limits; model availability can vary.", color = Color.Gray, fontSize = 11.sp)
                     }
                 },
                 confirmButton = {
