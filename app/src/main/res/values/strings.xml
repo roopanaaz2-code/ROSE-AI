@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ROSE AI</string>
+    <string name="accessibility_description">Optional user-enabled service for ROSE actions explicitly requested by the user.</string>
+</resources>
