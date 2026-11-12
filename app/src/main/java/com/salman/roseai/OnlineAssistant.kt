@@ -7,7 +7,7 @@ import java.net.URL
 
 /** OpenAI-compatible online chat. The API key is supplied by the user and never logged. */
 object OnlineAssistant {
-    fun reply(apiKey: String, prompt: String): String {
+    fun reply(apiKey: String, conversation: List<Pair<String, String>>): String {
         val connection = (URL("https://api.openai.com/v1/chat/completions").openConnection() as HttpURLConnection)
         try {
             connection.requestMethod = "POST"
@@ -16,13 +16,17 @@ object OnlineAssistant {
             connection.doOutput = true
             connection.setRequestProperty("Authorization", "Bearer $apiKey")
             connection.setRequestProperty("Content-Type", "application/json")
-            val body = JSONObject()
-                .put("model", "gpt-4o-mini")
-                .put("messages", JSONArray().put(
-                    JSONObject().put("role", "system")
-                        .put("content", "You are ROSE, a warm, capable Android voice assistant. Be concise, safe, and honest about device actions. Never claim an action happened unless Android confirms it.")
-                ).put(JSONObject().put("role", "user").put("content", prompt)))
-                .put("temperature", 0.7)
+            val messages = JSONArray().put(
+                JSONObject().put("role", "system")
+                    .put("content", "You are ROSE, a warm, capable Android voice assistant. Be concise, safe, and honest about device actions. Never claim an action happened unless Android confirms it. Explain when a phone feature or permission is unavailable.")
+            )
+            conversation.takeLast(20).forEach { (role, content) ->
+                if ((role == "user" || role == "assistant") && content.isNotBlank()) {
+                    messages.put(JSONObject().put("role", role).put("content", content.take(4000)))
+                }
+            }
+            val body = JSONObject().put("model", "gpt-4o-mini")
+                .put("messages", messages).put("temperature", 0.7)
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
