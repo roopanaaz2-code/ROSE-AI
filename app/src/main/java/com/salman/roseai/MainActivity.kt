@@ -184,17 +184,18 @@ private fun RoseApp(
         }
         val key = secureStore.read()
         if (!key.isNullOrBlank()) {
-            busy = true
-            status = "ROSE is thinking online…"
-            Thread {
-                val conversation = messages.takeLast(20).mapNotNull { line ->
+            // Snapshot Compose state on the UI thread before starting network work.
+            val conversation = messages.takeLast(20).mapNotNull { line ->
                 when {
                     line.startsWith("You: ") -> "user" to line.removePrefix("You: ")
                     line.startsWith("ROSE: ") -> "assistant" to line.removePrefix("ROSE: ")
                     else -> null
                 }
             }
-            val answer = try { OnlineAssistant.reply(key, conversation) }
+            busy = true
+            status = "ROSE is thinking online…"
+            Thread {
+                val answer = try { OnlineAssistant.reply(key, conversation) }
                 catch (_: Exception) { "I couldn't reach the online service. Check your internet connection and API settings." }
                 mainHandler.post {
                     busy = false
