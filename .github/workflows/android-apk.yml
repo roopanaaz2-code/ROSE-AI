@@ -16,39 +16,60 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
+
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
       - name: Validate required source files
+        shell: bash
         run: |
+          set -euo pipefail
           test -f settings.gradle
           test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/java/com/salman/roseai/MainActivity.kt
           test -f app/src/main/java/com/salman/roseai/RoseAccessibilityService.kt
+          test -f app/src/main/java/com/salman/roseai/OnlineAssistant.kt
+          test -f app/src/main/java/com/salman/roseai/SecureKeyStore.kt
+          grep -q 'android.permission.RECORD_AUDIO' app/src/main/AndroidManifest.xml
+          grep -q 'BIND_ACCESSIBILITY_SERVICE' app/src/main/AndroidManifest.xml
+
+      - name: Run unit tests and Android lint
+        run: gradle --no-daemon --stacktrace testDebugUnitTest lintDebug
+
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
+
       - name: Verify APK
+        shell: bash
         run: |
+          set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           sha256sum "$APK"
+          stat --format='APK size: %s bytes' "$APK"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -56,6 +77,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
       - name: Publish tagged release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
