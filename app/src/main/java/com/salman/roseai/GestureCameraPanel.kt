@@ -1,7 +1,11 @@
 package com.salman.roseai
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -13,7 +17,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -32,20 +35,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetectorOptions
-import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
-import java.util.concurrent.Executors
-import kotlin.math.abs
-import android.os.Handler
-import android.os.Looper
+import com.google.mediapipe.framework.image.MediaImageBuilder
+import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
+import com.google.mediapipe.tasks.vision.core.RunningMode
+import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
+import com.google.mediapipe.tasks.vision.gesturerecognizer.GestureRecognizer
 
 /**
- * Camera gesture mode is opt-in. Frames are analyzed on-device and are never uploaded.
- * Wrist movement can request vertical scrolling; eye-open classification is shown as
- * an experimental blink signal, not as precise gaze tracking.
+ * Opt-in front-camera interaction. MediaPipe models run on-device; frames are never uploaded.
+ * Hand gestures trigger an allow-listed set of navigation actions. Eye gaze is an approximate
+ * iris-landmark estimate and should not be treated as calibrated eye-tracking hardware.
  */
 @Composable
 fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
@@ -55,35 +55,32 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
     var cameraGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
-    var status by remember { mutableStateOf("Camera is off. Start it to enable local gesture detection.") }
+    var status by remember { mutableStateOf("Camera is off. Start it to enable on-device hand and eye tracking.") }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraGranted = granted
         cameraEnabled = granted
-        status = if (granted) "Camera active • processing stays on this phone" else "Camera permission denied. Gesture mode remains off."
+        status = if (granted) "Camera active • MediaPipe processing stays on this phone" else "Camera permission denied. Gesture mode remains off."
     }
     val controller = remember(context) {
         LifecycleCameraController(context).apply {
             cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
             imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+            setImageAnalysisOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
         }
     }
-    val executor = remember { Executors.newSingleThreadExecutor() }
+    val executor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val currentOnAction by rememberUpdatedState(onAction)
-    val analyzer = remember {
-        RoseCameraAnalyzer(
-            onScroll = { direction ->
+    val analyzer = remember(context) {
+        RoseMediaPipeAnalyzer(
+            context = context,
+            onGesture = { gesture, action ->
                 mainHandler.post {
-                    status = when (direction) {
-                        "scroll_down" -> "Hand swipe detected • scrolling down"
-                        "scroll_up" -> "Hand swipe detected • scrolling up"
-                        "swipe_left" -> "Hand swipe detected • swipe left"
-                        else -> "Hand swipe detected • swipe right"
-                    }
-                    currentOnAction(direction)
+                    status = "$gesture detected • ${action.replace('_', ' ')}"
+                    currentOnAction(action)
                 }
             },
-            onEye = { mainHandler.post { status = "Blink signal detected • eye direction is not calibrated" } }
+            onGaze = { gaze -> mainHandler.post { status = "Eye direction: $gaze" } }
         )
     }
     DisposableEffect(analyzer) {
@@ -95,7 +92,7 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
             try {
                 controller.setImageAnalysisAnalyzer(executor, analyzer)
                 controller.bindToLifecycle(lifecycleOwner)
-                status = "Front camera active • raise and move a wrist to scroll"
+                status = "Front camera active • show a clear hand gesture and face"
             } catch (_: Exception) {
                 cameraEnabled = false
                 status = "Unable to start the front camera on this device."
@@ -116,10 +113,10 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ROSE Gesture Mode") },
+        title = { Text("ROSE Hand & Eye Mode") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Optional front-camera mode. Wrist movement can scroll up or down. Blink detection is experimental; directional eye tracking is not available yet.")
+                Text("Hand gestures: open palm = scroll down, pointing up = scroll up, closed fist = back, victory = home, thumbs up/down = swipe right/left, I-love-you = recent apps.")
                 if (cameraEnabled) {
                     AndroidView(
                         factory = { ctx -> PreviewView(ctx).also { it.controller = controller } },
@@ -128,21 +125,19 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
                     )
                 }
                 Text(status)
-                Text("Camera frames are processed locally and are not sent to the AI service. To execute swipes, enable ROSE in Android Accessibility settings.")
+                Text("Eye direction is estimated from iris landmarks and may need good lighting, a clear face view, and calibration. It is not medical-grade tracking.")
+                Text("Camera frames are processed locally and are not sent to ROSE's online AI. Enable Accessibility below to execute navigation gestures.")
             }
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onAction("open accessibility settings") }) { Text("Accessibility") }
+                OutlinedButton(onClick = { currentOnAction("open accessibility settings") }) { Text("Accessibility") }
                 if (cameraEnabled) {
                     OutlinedButton(onClick = { cameraEnabled = false; status = "Camera stopped." }) { Text("Stop camera") }
                 } else {
                     Button(onClick = {
-                        if (cameraGranted) {
-                            cameraEnabled = true
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
+                        if (cameraGranted) cameraEnabled = true
+                        else permissionLauncher.launch(Manifest.permission.CAMERA)
                     }) { Text("Start camera") }
                 }
                 Button(onClick = onDismiss) { Text("Close") }
@@ -151,28 +146,43 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
     )
 }
 
-private class RoseCameraAnalyzer(
-    private val onScroll: (String) -> Unit,
-    private val onEye: () -> Unit
+private class RoseMediaPipeAnalyzer(
+    context: Context,
+    private val onGesture: (String, String) -> Unit,
+    private val onGaze: (String) -> Unit
 ) : ImageAnalysis.Analyzer {
-    private val poseDetector = PoseDetection.getClient(
-        PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).build()
-    )
-    private val faceDetector = FaceDetection.getClient(
-        FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+    private val gestureRecognizer = GestureRecognizer.createFromOptions(
+        context,
+        GestureRecognizer.GestureRecognizerOptions.builder()
+            .setBaseOptions(BaseOptions.builder().setModelAssetPath("gesture_recognizer.task").build())
+            .setRunningMode(RunningMode.VIDEO)
+            .setNumHands(2)
             .build()
     )
-    private var previousWristY: Float? = null
-    private var previousWristX: Float? = null
-    private var previousEyeOpen = true
+    private val faceLandmarker = FaceLandmarker.createFromOptions(
+        context,
+        FaceLandmarker.FaceLandmarkerOptions.builder()
+            .setBaseOptions(BaseOptions.builder().setModelAssetPath("face_landmarker.task").build())
+            .setRunningMode(RunningMode.VIDEO)
+            .setNumFaces(1)
+            .build()
+    )
+    private val gestureActions = mapOf(
+        "Open_Palm" to "scroll_down",
+        "Pointing_Up" to "scroll_up",
+        "Closed_Fist" to "back",
+        "Victory" to "home",
+        "Thumb_Up" to "swipe_right",
+        "Thumb_Down" to "swipe_left",
+        "ILoveYou" to "recents"
+    )
+    private var previousGesture = "None"
     private var lastGestureAt = 0L
-    private var lastBlinkAt = 0L
+    private var previousGaze = ""
 
     fun close() {
-        poseDetector.close()
-        faceDetector.close()
+        gestureRecognizer.close()
+        faceLandmarker.close()
     }
 
     override fun analyze(proxy: androidx.camera.core.ImageProxy) {
@@ -181,61 +191,75 @@ private class RoseCameraAnalyzer(
             proxy.close()
             return
         }
-        val image = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-        val poseTask = poseDetector.process(image)
-        val faceTask = faceDetector.process(image)
-        com.google.android.gms.tasks.Tasks.whenAllComplete(poseTask, faceTask).addOnCompleteListener {
-            try {
-                if (poseTask.isSuccessful) {
-                    val pose = poseTask.result
-                    val left = pose.getPoseLandmark(com.google.mlkit.vision.pose.PoseLandmark.LEFT_WRIST)
-                    val right = pose.getPoseLandmark(com.google.mlkit.vision.pose.PoseLandmark.RIGHT_WRIST)
-                    val wrists = listOfNotNull(left, right)
-                    val wristY = wrists.map { it.position.y }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
-                    val wristX = wrists.map { it.position.x }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
-                    val now = System.currentTimeMillis()
-                    if (wristY != null && wristX != null) {
-                        val oldY = previousWristY
-                        val oldX = previousWristX
-                        if (now - lastGestureAt > 1100L) {
-                            val deltaY = oldY?.let { wristY - it } ?: 0f
-                            val deltaX = oldX?.let { wristX - it } ?: 0f
-                            when {
-                                abs(deltaY) > 125f && abs(deltaY) > abs(deltaX) -> {
-                                    lastGestureAt = now
-                                    onScroll(if (deltaY > 0) "scroll_up" else "scroll_down")
-                                }
-                                abs(deltaX) > 150f -> {
-                                    lastGestureAt = now
-                                    onScroll(if (deltaX > 0) "swipe_left" else "swipe_right")
-                                }
-                            }
-                        }
-                        previousWristY = wristY
-                        previousWristX = wristX
-                    }
-                }
-                if (faceTask.isSuccessful) {
-                    val face = faceTask.result.firstOrNull()
-                    val leftEye = face?.leftEyeOpenProbability
-                    val rightEye = face?.rightEyeOpenProbability
-                    if (leftEye != null && rightEye != null) {
-                        val open = leftEye > 0.65f && rightEye > 0.65f
-                        val closed = leftEye < 0.25f && rightEye < 0.25f
-                        val now = System.currentTimeMillis()
-                        if (previousEyeOpen && closed && now - lastBlinkAt > 1400L) {
-                            lastBlinkAt = now
-                            onEye()
-                        }
-                        if (open) previousEyeOpen = true
-                        else if (closed) previousEyeOpen = false
-                    }
-                }
-            } catch (_: Exception) {
-                // Ignore an individual frame; camera analysis must continue safely.
-            } finally {
-                proxy.close()
+        try {
+            val image = MediaImageBuilder(mediaImage).build()
+            val processing = ImageProcessingOptions.builder()
+                .setRotationDegrees(proxy.imageInfo.rotationDegrees)
+                .build()
+            val timestamp = SystemClock.uptimeMillis()
+
+            val gestureResult = gestureRecognizer.recognizeForVideo(image, processing, timestamp)
+            val top = gestureResult.gestures().firstOrNull()?.firstOrNull()
+            val gestureName = top?.categoryName().orEmpty().ifBlank { "None" }
+            val confidence = top?.score() ?: 0f
+            val action = gestureActions[gestureName]
+            val now = SystemClock.uptimeMillis()
+            if (action != null && confidence >= 0.72f && gestureName != previousGesture && now - lastGestureAt > 900L) {
+                previousGesture = gestureName
+                lastGestureAt = now
+                onGesture(gestureName.replace('_', ' '), action)
+            } else if (gestureName == "None") {
+                previousGesture = "None"
             }
+
+            val faceResult = faceLandmarker.detectForVideo(image, processing, timestamp)
+            val face = faceResult.faceLandmarks().firstOrNull()
+            val gaze = estimateGaze(face) ?: "face not detected"
+            if (gaze != previousGaze) {
+                previousGaze = gaze
+                onGaze(gaze)
+            }
+        } catch (_: Exception) {
+            // Skip a bad frame without interrupting camera streaming.
+        } finally {
+            proxy.close()
+        }
+    }
+
+    private fun estimateGaze(points: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>?): String? {
+        if (points == null || points.size < 478) return null
+
+        fun value(index: Int, axis: String): Float =
+            if (axis == "x") points[index].x() else points[index].y()
+
+        fun ratio(center: Float, edgeA: Float, edgeB: Float): Float? {
+            val low = minOf(edgeA, edgeB)
+            val high = maxOf(edgeA, edgeB)
+            if (high - low < 0.001f) return null
+            return ((center - low) / (high - low)).coerceIn(0f, 1f)
+        }
+
+        val rightX = ratio(value(468, "x"), value(33, "x"), value(133, "x"))
+        val leftX = ratio(value(473, "x"), value(362, "x"), value(263, "x"))
+        val rightY = ratio(value(468, "y"), value(159, "y"), value(145, "y"))
+        val leftY = ratio(value(473, "y"), value(386, "y"), value(374, "y"))
+        val x = listOfNotNull(rightX, leftX).takeIf { it.size == 2 }?.average()?.toFloat() ?: return null
+        val y = listOfNotNull(rightY, leftY).takeIf { it.size == 2 }?.average()?.toFloat() ?: return null
+        val horizontal = when {
+            x < 0.34f -> "left"
+            x > 0.66f -> "right"
+            else -> "center"
+        }
+        val vertical = when {
+            y < 0.34f -> "up"
+            y > 0.66f -> "down"
+            else -> "center"
+        }
+        return when {
+            horizontal == "center" && vertical == "center" -> "center"
+            vertical == "center" -> horizontal
+            horizontal == "center" -> vertical
+            else -> "$vertical and $horizontal"
         }
     }
 }
