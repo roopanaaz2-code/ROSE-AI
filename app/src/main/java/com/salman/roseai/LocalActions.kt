@@ -40,6 +40,11 @@ class LocalActions(private val context: Context) {
             lower in listOf("recent apps", "show recent apps", "open recent apps") -> "recents"
             lower in listOf("scroll down", "swipe up") -> "scroll_down"
             lower in listOf("scroll up", "swipe down") -> "scroll_up"
+            lower in listOf("swipe left", "move left") -> "swipe_left"
+            lower in listOf("swipe right", "move right") -> "swipe_right"
+            lower in listOf("show notifications", "open notifications", "notification shade") -> "notifications"
+            lower in listOf("open quick settings", "show quick settings") -> "quick_settings"
+            lower in listOf("take screenshot", "capture screenshot") -> "screenshot"
             else -> null
         }
         if (navigation != null) {
@@ -49,10 +54,15 @@ class LocalActions(private val context: Context) {
                     "home" -> "Going to the Home screen."
                     "recents" -> "Opening recent apps."
                     "scroll_down" -> "Scrolling down."
+                    "swipe_left" -> "Swiping left."
+                    "swipe_right" -> "Swiping right."
+                    "notifications" -> "Opening notifications."
+                    "quick_settings" -> "Opening quick settings."
+                    "screenshot" -> "Taking a screenshot."
                     else -> "Scrolling up."
                 }
             }
-            return "To use phone navigation, first open Accessibility settings and enable ROSE AI. This permission is optional and can be turned off anytime."
+            return "To use phone navigation and gesture actions, first open Accessibility settings and enable ROSE AI. This permission is optional and can be turned off anytime."
         }
 
         val alarm = Regex("""(?:set|create) (?:an? )?alarm(?: for)? (\d{1,2})(?::(\d{2}))?\s*(am|pm)?""", RegexOption.IGNORE_CASE)
