@@ -12,8 +12,8 @@ import java.util.Locale
 /** Explicit, user-initiated Android actions. Consequential actions open system UI for review. */
 class LocalActions(private val context: Context) {
     fun handle(raw: String): String? {
-        val text = translateLocalizedCommand(raw.trim())
-        val lower = text.lowercase(Locale.ROOT)
+        val text = raw.trim()
+        val lower = translateLocalizedCommand(text).lowercase(Locale.ROOT)
 
         // Execute explicitly spoken, ordered command chains one step at a time.
         val steps = text.split(Regex("\\s+(?:and then|then)\\s+|\\s+(?:پھر|او بیا)\\s+", RegexOption.IGNORE_CASE))
