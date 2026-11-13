@@ -38,6 +38,7 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import java.util.concurrent.Executors
+import kotlin.math.abs
 import android.os.Handler
 import android.os.Looper
 
@@ -73,7 +74,12 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
         RoseCameraAnalyzer(
             onScroll = { direction ->
                 mainHandler.post {
-                    status = if (direction == "scroll_down") "Hand swipe detected • scrolling down" else "Hand swipe detected • scrolling up"
+                    status = when (direction) {
+                        "scroll_down" -> "Hand swipe detected • scrolling down"
+                        "scroll_up" -> "Hand swipe detected • scrolling up"
+                        "swipe_left" -> "Hand swipe detected • swipe left"
+                        else -> "Hand swipe detected • swipe right"
+                    }
                     currentOnAction(direction)
                 }
             },
@@ -158,6 +164,7 @@ private class RoseCameraAnalyzer(
             .build()
     )
     private var previousWristY: Float? = null
+    private var previousWristX: Float? = null
     private var previousEyeOpen = true
     private var lastGestureAt = 0L
     private var lastBlinkAt = 0L
@@ -182,21 +189,29 @@ private class RoseCameraAnalyzer(
                     val pose = poseTask.result
                     val left = pose.getPoseLandmark(com.google.mlkit.vision.pose.PoseLandmark.LEFT_WRIST)
                     val right = pose.getPoseLandmark(com.google.mlkit.vision.pose.PoseLandmark.RIGHT_WRIST)
-                    val wristY = listOfNotNull(left, right).map { it.position.y }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
-                    if (wristY != null) {
-                        val old = previousWristY
-                        val now = System.currentTimeMillis()
-                        if (old != null && now - lastGestureAt > 1100L) {
-                            val delta = wristY - old
-                            if (delta > 125f) {
-                                lastGestureAt = now
-                                onScroll("scroll_up")
-                            } else if (delta < -125f) {
-                                lastGestureAt = now
-                                onScroll("scroll_down")
+                    val wrists = listOfNotNull(left, right)
+                    val wristY = wrists.map { it.position.y }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+                    val wristX = wrists.map { it.position.x }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+                    val now = System.currentTimeMillis()
+                    if (wristY != null && wristX != null) {
+                        val oldY = previousWristY
+                        val oldX = previousWristX
+                        if (now - lastGestureAt > 1100L) {
+                            val deltaY = oldY?.let { wristY - it } ?: 0f
+                            val deltaX = oldX?.let { wristX - it } ?: 0f
+                            when {
+                                abs(deltaY) > 125f && abs(deltaY) > abs(deltaX) -> {
+                                    lastGestureAt = now
+                                    onScroll(if (deltaY > 0) "scroll_up" else "scroll_down")
+                                }
+                                abs(deltaX) > 150f -> {
+                                    lastGestureAt = now
+                                    onScroll(if (deltaX > 0) "swipe_left" else "swipe_right")
+                                }
                             }
                         }
                         previousWristY = wristY
+                        previousWristX = wristX
                     }
                 }
                 if (faceTask.isSuccessful) {
