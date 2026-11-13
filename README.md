@@ -10,7 +10,7 @@ ROSE AI is a standalone Android app. It does not modify NightLink or Salman AI C
 - On-device chat history and personality persistence.
 - Offline command engine: current time/date, basic arithmetic, open Android settings/Wi-Fi settings, launch installed apps, and prepare an alarm in the system clock app.
 - Optional accessibility navigation commands: back, home, recent apps, vertical scrolling, horizontal swipes, notifications, quick settings, and screenshots on supported Android versions. The user must explicitly enable ROSE in Android Accessibility settings first.
-- Optional front-camera Gesture Mode. The camera starts only after the user opens Gesture Mode, taps Start camera, and grants camera permission. On-device wrist movement can trigger scrolling and horizontal swipes; eye-open classification can report an experimental blink signal. Camera frames are not uploaded.
+- Optional front-camera Gesture Mode. The camera starts only after the user opens Gesture Mode, taps Start camera, and grants camera permission. On-device MediaPipe hand gestures can trigger scrolling, horizontal swipes, Back, Home, and Recent Apps; approximate iris-landmark gaze direction is displayed. Accuracy depends on camera quality, lighting, face position, and calibration. Camera frames are not uploaded.
 - Dialler action opens the phone dialler for user review; ROSE never places a call itself.
 - Optional OpenRouter online chat using the user's own API key and the free-model router; recent conversation turns are included for continuity. Free model availability and quotas are controlled by OpenRouter and may change.
 - API key encrypted with Android Keystore AES-GCM; key is not hardcoded in the source or APK.
@@ -35,7 +35,7 @@ Offline mode provides the built-in command engine and device TTS. Speech-to-text
 
 ## Not included yet
 - Wake word / always-on background listening and its foreground-service notification.
-- Precise directional eye-gaze tracking; current camera support reports experimental blink/eye-open signals only, not gaze direction.
-- Fine-grained finger gestures such as pinching or tapping; current gesture controls use wrist movement rather than a dedicated hand-landmark model.
+- Calibrated, accessibility-grade eye tracking; gaze direction is an approximate iris-landmark estimate and may drift.
+- Custom finger gestures such as pinching or tapping; the included MediaPipe model recognizes its built-in gesture classes, not arbitrary custom gestures.
 - General screen reading, arbitrary tap automation, or unattended phone actions.
 - An integrated offline generative language model.
