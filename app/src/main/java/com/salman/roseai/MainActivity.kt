@@ -50,9 +50,24 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var speechRecognizer: SpeechRecognizer? = null
     private var onRecognized: ((String) -> Unit)? = null
     private var onSpeechError: (() -> Unit)? = null
+    private var pendingSpeechLanguage = "en-US"
+    private var pendingWakeLanguage = "en-US"
 
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startSpeechRecognition() else onSpeechError?.invoke()
+        if (granted) startSpeechRecognition(pendingSpeechLanguage) else onSpeechError?.invoke()
+    }
+
+    private val wakeMicPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startWakeWordService(pendingWakeLanguage)
+    }
+
+    private fun startWakeWordService(languageTag: String) {
+        val intent = Intent(this, RoseWakeWordService::class.java).putExtra(RoseWakeWordService.EXTRA_LANGUAGE_TAG, languageTag)
+        androidx.core.content.ContextCompat.startForegroundService(this, intent)
+    }
+
+    private fun stopWakeWordService() {
+        stopService(Intent(this, RoseWakeWordService::class.java))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,14 +78,26 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
         setContent {
             RoseApp(
-                onListen = { result, error ->
+                onListen = { languageTag, result, error ->
                     onRecognized = result
                     onSpeechError = error
+                    pendingSpeechLanguage = languageTag
                     if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        startSpeechRecognition()
+                        startSpeechRecognition(languageTag)
                     } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
                 },
-                onSpeak = { text, style ->
+                onWakeToggle = { enabled, languageTag ->
+                    pendingWakeLanguage = languageTag
+                    if (enabled) {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            startWakeWordService(languageTag)
+                        } else wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    } else stopWakeWordService()
+                },
+                onSpeak = { text, style, languageTag ->
+                    val locale = Locale.forLanguageTag(languageTag)
+                    val languageStatus = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
+                    if (languageStatus < TextToSpeech.LANG_AVAILABLE) tts?.setLanguage(Locale.getDefault())
                     val (pitch, rate) = when (style) {
                         "Cheerful" -> 1.15f to 1.08f
                         "Caring" -> 0.94f to 0.92f
@@ -85,7 +112,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun startSpeechRecognition() {
+    private fun startSpeechRecognition(languageTag: String) {
         val recognizer = speechRecognizer ?: run {
             onSpeechError?.invoke()
             return
@@ -106,7 +133,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         })
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
         }
         recognizer.startListening(intent)
@@ -133,8 +161,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
 @Composable
 private fun RoseApp(
-    onListen: ((String) -> Unit, () -> Unit) -> Unit,
-    onSpeak: (String, String) -> Unit
+    onListen: (String, (String) -> Unit, () -> Unit) -> Unit,
+    onWakeToggle: (Boolean, String) -> Unit,
+    onSpeak: (String, String, String) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("rose_settings", android.content.Context.MODE_PRIVATE) }
@@ -142,6 +171,8 @@ private fun RoseApp(
     val localActions = remember { LocalActions(context) }
     val personas = listOf("Cheerful", "Caring", "Playful", "Calm")
     var persona by remember { mutableStateOf(prefs.getString("persona", "Calm") ?: "Calm") }
+    var speechLanguage by remember { mutableStateOf(prefs.getString("speech_language", "en-US") ?: "en-US") }
+    var wakeEnabled by remember { mutableStateOf(prefs.getBoolean("wake_enabled", false)) }
     var input by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -167,7 +198,7 @@ private fun RoseApp(
     fun speakAndAdd(reply: String) {
         messages.add("ROSE: $reply")
         persist()
-        onSpeak(reply, persona)
+        onSpeak(reply, persona, speechLanguage)
     }
 
     fun handleMessage(raw: String) {
@@ -242,6 +273,38 @@ private fun RoseApp(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(status, color = Color(0xFFE9C8D8), fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("SPEECH LANGUAGE", color = Color.LightGray, fontSize = 10.sp, letterSpacing = 1.5.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("English" to "en-US", "اردو" to "ur-PK", "پښتو" to "ps-AF").forEach { (label, tag) ->
+                        FilterChip(selected = speechLanguage == tag, onClick = {
+                            speechLanguage = tag
+                            prefs.edit().putString("speech_language", tag).apply()
+                        }, label = { Text(label, fontSize = 11.sp) })
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Wake word: Hey ROSE", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Keeps listening with a visible foreground notification", color = Color.Gray, fontSize = 9.sp)
+                    }
+                    Switch(checked = wakeEnabled, onCheckedChange = { enabled ->
+                        if (enabled && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            // Ask in-app for microphone permission; start the service only after approval.
+                            wakeEnabled = false
+                            prefs.edit().putBoolean("wake_enabled", false).apply()
+                            onWakeToggle(false, speechLanguage)
+                            // The normal microphone button also requests permission; the dedicated switch is retried after grant.
+                            status = "Tap the microphone once to grant permission, then enable wake word mode."
+                        } else {
+                            wakeEnabled = enabled
+                            prefs.edit().putBoolean("wake_enabled", enabled).apply()
+                            onWakeToggle(enabled, speechLanguage)
+                            status = if (enabled) "Wake word service requested • Say Hey ROSE" else "Wake word listening stopped"
+                        }
+                    })
+                }
+                Spacer(Modifier.height(8.dp))
                 Spacer(Modifier.height(12.dp))
                 Text("VOICE PERSONALITY", color = Color.LightGray, fontSize = 10.sp, letterSpacing = 1.5.sp)
                 Spacer(Modifier.height(6.dp))
@@ -278,7 +341,7 @@ private fun RoseApp(
                     IconButton(onClick = {
                         listening = true
                         status = "Listening…"
-                        onListen({ spoken ->
+                        onListen(speechLanguage, { spoken ->
                             listening = false
                             status = "Voice captured"
                             handleMessage(spoken)
@@ -291,7 +354,7 @@ private fun RoseApp(
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Mic activates only when tapped • Chat history stays on this phone", color = Color.Gray, fontSize = 9.sp)
+                Text("Push-to-talk + optional wake-word listening • Chat history stays on this phone", color = Color.Gray, fontSize = 9.sp)
             }
         }
 
@@ -303,7 +366,8 @@ private fun RoseApp(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Mode: Offline commands work without an AI key. Online chat uses your own OpenRouter API key and free model routing.")
                         Text(if (secureStore.read().isNullOrBlank()) "Online AI: Not configured" else "Online AI: API key saved securely")
-                        Text("Speech recognition and spoken voice are provided by Android. Offline speech depends on your installed language pack.")
+                        Text("Speech recognition and spoken voice are provided by Android. English, Urdu and Pashto availability depends on your device speech and TTS language packs.")
+                        Text("Wake word mode uses a foreground microphone service with a persistent notification. Start it while ROSE is open, and stop it with the switch. It is not a hardware low-power hotword engine.")
                         Text("Camera hand/eye tracking is not yet enabled. ROSE supports explicit voice navigation and ordered command chains; camera controls will be added only with a tested on-device vision model.")
                     }
                 },
