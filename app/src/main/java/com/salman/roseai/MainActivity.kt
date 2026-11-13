@@ -225,7 +225,7 @@ private fun RoseApp(
                         Text("YOUR PERSONAL AI COMPANION", color = Color.LightGray, fontSize = 9.sp, letterSpacing = 2.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("v0.2", color = Color.Gray, fontSize = 11.sp)
+                        Text("v0.3", color = Color.Gray, fontSize = 11.sp)
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Rose)
                         }
