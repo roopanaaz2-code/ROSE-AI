@@ -148,6 +148,7 @@ private fun RoseApp(
     var status by remember { mutableStateOf("Offline-ready • Tap to speak") }
     var showSettings by remember { mutableStateOf(false) }
     var showKey by remember { mutableStateOf(false) }
+    var showGesturePanel by remember { mutableStateOf(false) }
     var apiKeyDraft by remember { mutableStateOf(secureStore.read().orEmpty()) }
     val messages = remember {
         mutableStateListOf<String>().apply {
@@ -224,7 +225,7 @@ private fun RoseApp(
                         Text("YOUR PERSONAL AI COMPANION", color = Color.LightGray, fontSize = 9.sp, letterSpacing = 2.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("v0.2", color = Color.Gray, fontSize = 11.sp)
+                        Text("v0.3", color = Color.Gray, fontSize = 11.sp)
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Rose)
                         }
@@ -304,7 +305,10 @@ private fun RoseApp(
                         Text("Mode: Offline commands work without an AI key. Online chat uses your own OpenRouter API key and free model routing.")
                         Text(if (secureStore.read().isNullOrBlank()) "Online AI: Not configured" else "Online AI: API key saved securely")
                         Text("Speech recognition and spoken voice are provided by Android. Offline speech depends on your installed language pack.")
-                        Text("Background wake word and camera gesture tracking are not enabled in this build.")
+                        Text("Wake-word listening is not enabled. Camera Gesture Mode is optional and starts only after you tap Start camera and grant permission.")
+                        Button(onClick = { showGesturePanel = true; showSettings = false }) {
+                            Text("Open Gesture Mode")
+                        }
                     }
                 },
                 confirmButton = {
@@ -317,6 +321,20 @@ private fun RoseApp(
                         Text("Clear chat")
                     }
                 }
+            )
+        }
+
+        if (showGesturePanel) {
+            GestureCameraPanel(
+                onAction = { action ->
+                    val reply = localActions.handle(action)
+                    if (reply != null) {
+                        messages.add("ROSE: $reply")
+                        persist()
+                        onSpeak(reply, persona)
+                    }
+                },
+                onDismiss = { showGesturePanel = false }
             )
         }
 

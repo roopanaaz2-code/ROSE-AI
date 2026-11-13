@@ -11,8 +11,8 @@ android {
         applicationId 'com.salman.roseai'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.3.0'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -25,10 +25,47 @@ dependencies {
     implementation platform('androidx.compose:compose-bom:2024.12.01')
     implementation 'androidx.activity:activity-compose:1.10.0'
     implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'androidx.camera:camera-camera2:1.4.1'
+    implementation 'androidx.camera:camera-lifecycle:1.4.1'
+    implementation 'androidx.camera:camera-view:1.4.1'
+    implementation 'com.google.mediapipe:tasks-vision:1.1.1'
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.foundation:foundation'
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
     debugImplementation 'androidx.compose.ui:ui-tooling'
+}
+
+
+// Download the official MediaPipe task bundles into the app assets before compilation.
+// The models are packaged in the APK, so gesture and gaze inference works offline after install.
+def roseVisionAssets = file("$projectDir/src/main/assets")
+def roseVisionModels = [
+    "gesture_recognizer.task": "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
+    "face_landmarker.task": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+]
+tasks.register("downloadRoseVisionModels") {
+    outputs.files(roseVisionModels.keySet().collect { new File(roseVisionAssets, it) })
+    doLast {
+        roseVisionAssets.mkdirs()
+        roseVisionModels.each { modelName, modelUrl ->
+            def destination = new File(roseVisionAssets, modelName)
+            if (!destination.exists() || destination.length() < 1024L * 1024L) {
+                def connection = new URL(modelUrl).openConnection()
+                connection.connectTimeout = 30000
+                connection.readTimeout = 120000
+                connection.inputStream.withCloseable { input ->
+                    destination.withOutputStream { output -> input.transferTo(output) }
+                }
+            }
+            if (destination.length() < 1024L * 1024L) {
+                throw new GradleException("MediaPipe model download was incomplete: " + modelName)
+            }
+        }
+    }
+}
+tasks.named("preBuild").configure {
+    dependsOn("downloadRoseVisionModels")
 }

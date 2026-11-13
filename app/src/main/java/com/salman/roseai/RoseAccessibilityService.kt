@@ -36,6 +36,11 @@ class RoseAccessibilityService : AccessibilityService() {
             "recents" -> performGlobalAction(GLOBAL_ACTION_RECENTS)
             "scroll_up" -> dispatchScroll(down = false)
             "scroll_down" -> dispatchScroll(down = true)
+            "swipe_left" -> dispatchHorizontalSwipe(toLeft = true)
+            "swipe_right" -> dispatchHorizontalSwipe(toLeft = false)
+            "notifications" -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+            "quick_settings" -> performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+            "screenshot" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT) else false
             else -> false
         }
     }
@@ -49,6 +54,23 @@ class RoseAccessibilityService : AccessibilityService() {
         val path = Path().apply {
             moveTo(x, startY)
             lineTo(x, endY)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 350))
+            .build()
+        return dispatchGesture(gesture, null, null)
+    }
+
+
+    private fun dispatchHorizontalSwipe(toLeft: Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val metrics = resources.displayMetrics
+        val y = metrics.heightPixels * 0.5f
+        val startX = metrics.widthPixels * if (toLeft) 0.82f else 0.18f
+        val endX = metrics.widthPixels * if (toLeft) 0.18f else 0.82f
+        val path = Path().apply {
+            moveTo(startX, y)
+            lineTo(endX, y)
         }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, 350))
