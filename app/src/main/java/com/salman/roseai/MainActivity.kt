@@ -12,6 +12,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -51,14 +52,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var onRecognized: ((String) -> Unit)? = null
     private var onSpeechError: (() -> Unit)? = null
     private var pendingSpeechLanguage = "en-US"
-    private var pendingWakeLanguage = "en-US"
 
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startSpeechRecognition(pendingSpeechLanguage) else onSpeechError?.invoke()
-    }
-
-    private val wakeMicPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startWakeWordService(pendingWakeLanguage)
     }
 
     private fun startWakeWordService(languageTag: String) {
@@ -87,12 +83,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
                 },
                 onWakeToggle = { enabled, languageTag ->
-                    pendingWakeLanguage = languageTag
-                    if (enabled) {
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            startWakeWordService(languageTag)
-                        } else wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    } else stopWakeWordService()
+                    if (enabled) startWakeWordService(languageTag) else stopWakeWordService()
                 },
                 onSpeak = { text, style, languageTag ->
                     val locale = Locale.forLanguageTag(languageTag)
@@ -188,6 +179,18 @@ private fun RoseApp(
         }
     }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val wakePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            wakeEnabled = true
+            prefs.edit().putBoolean("wake_enabled", true).apply()
+            onWakeToggle(true, speechLanguage)
+            status = "Wake word service requested • Say Hey ROSE"
+        } else {
+            wakeEnabled = false
+            prefs.edit().putBoolean("wake_enabled", false).apply()
+            status = "Microphone permission was not granted."
+        }
+    }
 
     fun persist() {
         val array = JSONArray()
@@ -290,12 +293,7 @@ private fun RoseApp(
                     }
                     Switch(checked = wakeEnabled, onCheckedChange = { enabled ->
                         if (enabled && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                            // Ask in-app for microphone permission; start the service only after approval.
-                            wakeEnabled = false
-                            prefs.edit().putBoolean("wake_enabled", false).apply()
-                            onWakeToggle(false, speechLanguage)
-                            // The normal microphone button also requests permission; the dedicated switch is retried after grant.
-                            status = "Tap the microphone once to grant permission, then enable wake word mode."
+                            wakePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         } else {
                             wakeEnabled = enabled
                             prefs.edit().putBoolean("wake_enabled", enabled).apply()
