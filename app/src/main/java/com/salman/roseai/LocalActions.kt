@@ -12,11 +12,11 @@ import java.util.Locale
 /** Explicit, user-initiated Android actions. Consequential actions open system UI for review. */
 class LocalActions(private val context: Context) {
     fun handle(raw: String): String? {
-        val text = raw.trim()
-        val lower = text.lowercase(Locale.getDefault())
+        val text = translateLocalizedCommand(raw.trim())
+        val lower = text.lowercase(Locale.ROOT)
 
         // Execute explicitly spoken, ordered command chains one step at a time.
-        val steps = text.split(Regex("\\s+(?:and then|then)\\s+", RegexOption.IGNORE_CASE))
+        val steps = text.split(Regex("\\s+(?:and then|then)\\s+|\\s+(?:پھر|او بیا)\\s+", RegexOption.IGNORE_CASE))
             .map { it.trim() }.filter { it.isNotEmpty() }
         if (steps.size > 1) {
             val outcomes = steps.map { step -> handle(step) }
@@ -125,6 +125,31 @@ class LocalActions(private val context: Context) {
             return "I couldn't find an installed app named $requested."
         }
         return null
+    }
+
+    /** Maps a small, explicit set of Urdu and Pashto device commands to the same safe allow-list. */
+    private fun translateLocalizedCommand(raw: String): String {
+        val value = raw.lowercase(Locale.ROOT).trim()
+        return when {
+            value.contains("یوٹیوب کھولو") || value.contains("یوٹیوب اوپن کرو") ||
+                value.contains("یوټیوب خلاص کړه") || value.contains("يوټيوب خلاص کړه") -> "open youtube"
+            value.contains("سیٹنگز کھولو") || value.contains("ترتیبات کھولو") ||
+                value.contains("سیټنګونه خلاص کړه") -> "open settings"
+            value.contains("وائی فائی کھولو") || value.contains("وائی فائی سیٹنگز") ||
+                value.contains("وای فای کھولو") || value.contains("وای فای تنظیمات") -> "open wifi"
+            value.contains("واپس جاؤ") || value.contains("پیچھے جاؤ") ||
+                value.contains("شاته لاړ شه") || value == "شاته" -> "back"
+            value.contains("ہوم اسکرین") || value.contains("کور سکرین") ||
+                value.contains("کور ته لاړ شه") -> "home screen"
+            value.contains("نیچے سکرول کرو") || value.contains("لاندې سکرول کړه") -> "scroll down"
+            value.contains("اوپر سکرول کرو") || value.contains("پورته سکرول کړه") -> "scroll up"
+            value.contains("حالیہ ایپس") || value.contains("وروستي اپونه") -> "recent apps"
+            value.contains("وقت کیا ہوا ہے") || value.contains("کیا وقت ہے") ||
+                value.contains("اوس څو بجې دي") || value.contains("څو بجې دي") -> "what time is it"
+            value.contains("آج کی تاریخ") || value.contains("آج تاریخ کیا ہے") ||
+                value.contains("نن څه نېټه ده") -> "what is the date"
+            else -> raw
+        }
     }
 
     private fun launch(intent: Intent, success: String): String {
