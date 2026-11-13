@@ -37,7 +37,8 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import java.util.concurrent.Executors
-import kotlin.math.abs
+import android.os.Handler
+import android.os.Looper
 
 /**
  * Camera gesture mode is opt-in. Frames are analyzed on-device and are never uploaded.
@@ -65,13 +66,16 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
         }
     }
     val executor = remember { Executors.newSingleThreadExecutor() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val analyzer = remember(onAction) {
         RoseCameraAnalyzer(
             onScroll = { direction ->
-                status = if (direction == "scroll_down") "Hand swipe detected • scrolling down" else "Hand swipe detected • scrolling up"
-                onAction(direction)
+                mainHandler.post {
+                    status = if (direction == "scroll_down") "Hand swipe detected • scrolling down" else "Hand swipe detected • scrolling up"
+                    onAction(direction)
+                }
             },
-            onEye = { status = "Blink signal detected • eye direction is not calibrated" }
+            onEye = { mainHandler.post { status = "Blink signal detected • eye direction is not calibrated" } }
         )
     }
 
@@ -107,7 +111,7 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
                 Text("Optional front-camera mode. Wrist movement can scroll up or down. Blink detection is experimental; directional eye tracking is not available yet.")
                 if (cameraEnabled) {
                     AndroidView(
-                        factory = { ctx -> PreviewView(ctx).apply { controller = this@apply.let { controller } } },
+                        factory = { ctx -> PreviewView(ctx).also { it.controller = controller } },
                         modifier = Modifier.fillMaxWidth().height(220.dp),
                         update = { it.controller = controller }
                     )
