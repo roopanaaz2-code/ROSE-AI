@@ -304,7 +304,7 @@ private fun RoseApp(
                         Text("Mode: Offline commands work without an AI key. Online chat uses your own OpenRouter API key and free model routing.")
                         Text(if (secureStore.read().isNullOrBlank()) "Online AI: Not configured" else "Online AI: API key saved securely")
                         Text("Speech recognition and spoken voice are provided by Android. Offline speech depends on your installed language pack.")
-                        Text("Background wake word and camera gesture tracking are not enabled in this build.")
+                        Text("Camera hand/eye tracking is not yet enabled. ROSE supports explicit voice navigation and ordered command chains; camera controls will be added only with a tested on-device vision model.")
                     }
                 },
                 confirmButton = {

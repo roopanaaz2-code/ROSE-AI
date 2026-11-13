@@ -15,6 +15,17 @@ class LocalActions(private val context: Context) {
         val text = raw.trim()
         val lower = text.lowercase(Locale.getDefault())
 
+        // Execute explicitly spoken, ordered command chains one step at a time.
+        val steps = text.split(Regex("\\s+(?:and then|then)\\s+", RegexOption.IGNORE_CASE))
+            .map { it.trim() }.filter { it.isNotEmpty() }
+        if (steps.size > 1) {
+            val outcomes = steps.map { step -> handle(step) }
+            val failed = outcomes.indexOfFirst { it == null || it.startsWith("I couldn't") || it.startsWith("To use phone") }
+            return outcomes.mapIndexedNotNull { index, outcome ->
+                outcome?.let { "Step ${index + 1}: $it" }
+            }.joinToString(" ") + if (failed >= 0) " I stopped at the first command that could not be completed." else ""
+        }
+
         if (lower in listOf("what time is it", "time", "tell me the time", "current time")) {
             return "It's " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date()) + "."
         }
@@ -37,6 +48,8 @@ class LocalActions(private val context: Context) {
             lower in listOf("recent apps", "show recent apps", "open recent apps") -> "recents"
             lower in listOf("scroll down", "swipe up") -> "scroll_down"
             lower in listOf("scroll up", "swipe down") -> "scroll_up"
+            lower in listOf("swipe left", "move left") -> "swipe_left"
+            lower in listOf("swipe right", "move right") -> "swipe_right"
             else -> null
         }
         if (navigation != null) {

@@ -40,6 +40,27 @@ class RoseAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun dispatchSwipe(horizontal: Boolean, forward: Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val metrics = resources.displayMetrics
+        val path = Path()
+        if (horizontal) {
+            val y = metrics.heightPixels * 0.5f
+            val startX = metrics.widthPixels * if (forward) 0.2f else 0.8f
+            val endX = metrics.widthPixels * if (forward) 0.8f else 0.2f
+            path.moveTo(startX, y)
+            path.lineTo(endX, y)
+        } else {
+            val x = metrics.widthPixels * 0.5f
+            path.moveTo(x, metrics.heightPixels * 0.8f)
+            path.lineTo(x, metrics.heightPixels * 0.2f)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 300))
+            .build()
+        return dispatchGesture(gesture, null, null)
+    }
+
     private fun dispatchScroll(down: Boolean): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
         val metrics = resources.displayMetrics
