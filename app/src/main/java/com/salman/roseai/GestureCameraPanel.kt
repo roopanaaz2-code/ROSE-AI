@@ -128,11 +128,12 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
                     )
                 }
                 Text(status)
-                Text("Camera frames are processed locally and are not sent to the AI service.")
+                Text("Camera frames are processed locally and are not sent to the AI service. To execute swipes, enable ROSE in Android Accessibility settings.")
             }
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onAction("open accessibility settings") }) { Text("Accessibility") }
                 if (cameraEnabled) {
                     OutlinedButton(onClick = { cameraEnabled = false; status = "Camera stopped." }) { Text("Stop camera") }
                 } else {
