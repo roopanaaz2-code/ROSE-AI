@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -67,16 +68,20 @@ fun GestureCameraPanel(onAction: (String) -> Unit, onDismiss: () -> Unit) {
     }
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val analyzer = remember(onAction) {
+    val currentOnAction by rememberUpdatedState(onAction)
+    val analyzer = remember {
         RoseCameraAnalyzer(
             onScroll = { direction ->
                 mainHandler.post {
                     status = if (direction == "scroll_down") "Hand swipe detected • scrolling down" else "Hand swipe detected • scrolling up"
-                    onAction(direction)
+                    currentOnAction(direction)
                 }
             },
             onEye = { mainHandler.post { status = "Blink signal detected • eye direction is not calibrated" } }
         )
+    }
+    DisposableEffect(analyzer) {
+        onDispose { analyzer.close() }
     }
 
     LaunchedEffect(cameraEnabled) {
@@ -156,6 +161,11 @@ private class RoseCameraAnalyzer(
     private var previousEyeOpen = true
     private var lastGestureAt = 0L
     private var lastBlinkAt = 0L
+
+    fun close() {
+        poseDetector.close()
+        faceDetector.close()
+    }
 
     override fun analyze(proxy: androidx.camera.core.ImageProxy) {
         val mediaImage = proxy.image
