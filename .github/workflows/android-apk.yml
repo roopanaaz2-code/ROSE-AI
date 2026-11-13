@@ -49,9 +49,11 @@ jobs:
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/java/com/salman/roseai/MainActivity.kt
           test -f app/src/main/java/com/salman/roseai/RoseAccessibilityService.kt
+          test -f app/src/main/java/com/salman/roseai/GestureCameraPanel.kt
           test -f app/src/main/java/com/salman/roseai/OnlineAssistant.kt
           test -f app/src/main/java/com/salman/roseai/SecureKeyStore.kt
           grep -q 'android.permission.RECORD_AUDIO' app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.CAMERA' app/src/main/AndroidManifest.xml
           grep -q 'BIND_ACCESSIBILITY_SERVICE' app/src/main/AndroidManifest.xml
 
       - name: Run unit tests and Android lint
