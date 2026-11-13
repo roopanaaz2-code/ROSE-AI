@@ -12,7 +12,10 @@ import java.util.Locale
 /** Explicit, user-initiated Android actions. Consequential actions open system UI for review. */
 class LocalActions(private val context: Context) {
     fun handle(raw: String): String? {
+        // Strip the spoken wake phrase even when the user taps the mic manually.
         val text = raw.trim()
+            .replace(Regex("(?i)^\\s*(hey|hi)\\s+rose[,! ]*"), "")
+            .trim()
         val lower = text.lowercase(Locale.getDefault())
 
         if (lower in listOf("what time is it", "time", "tell me the time", "current time")) {
@@ -96,7 +99,12 @@ class LocalActions(private val context: Context) {
         }
 
         if (lower.startsWith("open ")) {
-            val requested = lower.removePrefix("open ").trim()
+            val requested = lower.removePrefix("open ")
+                .substringBefore(" and ")
+                .substringBefore(" then ")
+                .removeSuffix(" please")
+                .removeSuffix(" for me")
+                .trim()
             val launchables = context.packageManager.queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
             )
